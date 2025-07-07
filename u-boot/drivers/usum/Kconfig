@@ -1,0 +1,14 @@
+menuconfig USUM
+    bool "uSum"
+    default n
+    help
+      Enable uSum: the U-Boot System Update Manager.
+      When enabled, allows selecting update sources (USB, SD, TFTP) and
+      choosing system components (kernel, DTB, rootfs) to update via menu.
+
+      启用 uSum：U-Boot 系统更新管理器。
+      启用后可通过菜单选择更新源（USB、SD 卡、TFTP）以及需要更新的内容（如内核、设备树、rootfs 等）。
+
+if USUM
+
+endif # USUM

@@ -1,0 +1,1 @@
+obj-$(CONFIG_USUM) += cmd_usum.o
