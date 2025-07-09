@@ -11,4 +11,17 @@ menuconfig USUM
 
 if USUM
 
+config USUM_LOG_ENABLE
+    bool
+    default y
+
+config USUM_LOG_LEVEL
+    int "Default log level (0:INFO, 1:WARN, 2:ERROR, 3:DEBUG)"
+    depends on USUM_LOG_ENABLE
+    range 0 3
+    default 0
+    help
+      Select the minimum log level USUM will output.
+      仅打印级别小于等于该值的日志（0=仅 INFO，3=全部）。
+
 endif # USUM
