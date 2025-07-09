@@ -8,6 +8,7 @@
 #include <mapmem.h>
 
 #include "cmd_usum.h"
+#include "log_usum.h"
 
 static storage_configs_t cfg;
 static void read_line(char *buf, int maxlen)
@@ -44,15 +45,15 @@ static void read_line(char *buf, int maxlen)
     buf[i] = '\0';
 }
 
-static void selected_storage_dev(char *dev, storage_configs_t *cfg)
+static int selected_storage_dev(char *dev, storage_configs_t *cfg)
 {
 	memset(cfg, 0, sizeof(storage_configs_t));
 
 	// init stroage_type
-	printf("Selected storage device: %s\n", dev);
 	if (strcmp(dev, USUM_STORAGE_UDISK) == 0) 
 	{
 		strncpy(cfg->stroage_type, "usb", MAX_CFG_LEN - 1);
+		run_command("usb start", 0);
 	} 
 	else if (strcmp(dev, USUM_STORAGE_SDCARD) == 0) 
 	{
@@ -60,7 +61,7 @@ static void selected_storage_dev(char *dev, storage_configs_t *cfg)
 	} 
 	else 
 	{
-		printf("Unknown storage device, defaulting to USB.\n");
+		usum_log(USUM_LOG_WARN, "Unknown storage device, defaulting to USB.\n");
 		strncpy(cfg->stroage_type, "usb", MAX_CFG_LEN - 1);
 	}
 
@@ -75,7 +76,6 @@ static void selected_storage_dev(char *dev, storage_configs_t *cfg)
 	}
 	else 
 	{
-		printf("Using default device number 0.\n");
 		strncpy(cfg->stroage_dev_num, "0", MAX_CFG_LEN - 1);
 	}
 	
@@ -88,14 +88,21 @@ static void selected_storage_dev(char *dev, storage_configs_t *cfg)
 	}
 	else 
 	{
-		printf("Using default partition 1.\n");
 		strncpy(cfg->stroage_partition, "1", MAX_CFG_LEN - 1);
 	}
 
-	printf("Storage configuration:\n");
-	printf("  Type: %s\n", cfg->stroage_type);
-	printf("  Device Number: %s\n", cfg->stroage_dev_num);	
-	printf("  Partition: %s\n", cfg->stroage_partition);
+	// 检查所选存储介质是否存在
+	char dev_part[10];
+	snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg->stroage_dev_num, cfg->stroage_partition);
+	if (fs_set_blk_dev(cfg->stroage_type, dev_part, USUM_FS_TYPE)) 
+		return -1;
+
+	usum_log(USUM_LOG_INFO, "Storage configuration:\n");
+	usum_log(USUM_LOG_INFO, "- Type: %s\n", cfg->stroage_type);
+	usum_log(USUM_LOG_INFO, "- Device Number: %s\n", cfg->stroage_dev_num);	
+	usum_log(USUM_LOG_INFO, "- Partition: %s\n", cfg->stroage_partition);
+
+	return 0;
 }
 
 static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv[])
@@ -103,6 +110,7 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 	char *storage_dev[] = {USUM_STORAGE_UDISK, USUM_STORAGE_SDCARD};
 	int storage_dev_count = sizeof(storage_dev) / sizeof(storage_dev[0]);
 	char inbuf[16] = {0};
+	int ret;
 
 	while (1) 
 	{
@@ -129,14 +137,10 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 			continue;
 
 		// 存储介质选择
-		selected_storage_dev(storage_dev[selected_id], &cfg);
-
-		// 检查所选存储介质是否存在
-		char dev_part[10];
-		snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg.stroage_dev_num, cfg.stroage_partition);
-		if (fs_set_blk_dev(cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
+		ret = selected_storage_dev(storage_dev[selected_id], &cfg);
+		if (ret < 0)
 		{
-			printf("Failed to set block device %s %s:%s\n", cfg.stroage_type, cfg.stroage_dev_num, cfg.stroage_partition);
+			usum_log(USUM_LOG_ERROR, "Failed to select storage device %s\n", storage_dev[selected_id]);
 			continue;
 		}
     }
