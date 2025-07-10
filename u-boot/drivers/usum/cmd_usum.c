@@ -11,6 +11,96 @@
 #include "log_usum.h"
 
 static storage_configs_t cfg;
+
+static img_config_t img_list[USUM_IMG_TXT_MAX_IMG_CONFIGS];
+static int img_count = 0;
+
+static int parse_img_config_file(const char *filepath)
+{
+    char dev_part[10];
+    snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg.stroage_dev_num, cfg.stroage_partition);
+    if (fs_set_blk_dev(cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
+    {
+        USUM_LOG(USUM_LOG_ERROR, "Failed to set blk dev\n");
+        return -1;
+    }
+
+	loff_t file_size;
+    if (fs_size(USUM_IMG_TXT_PATH, &file_size)) 
+    {
+        USUM_LOG(USUM_LOG_ERROR, "Failed to get size of %s\n", USUM_IMG_TXT_PATH);
+        return 0;
+    }
+
+    if (file_size == 0)
+        return 0;
+
+    if (file_size > 8192) 
+    {
+        USUM_LOG(USUM_LOG_ERROR, "Invalid file size: %lld\n", file_size);
+        return -1;
+    }
+
+	char *buf = memalign(4, file_size + 1);
+    if (!buf) 
+    {
+        USUM_LOG(USUM_LOG_ERROR, "Failed to allocate buffer\n");
+        return 0;
+    }
+
+	if (fs_set_blk_dev(cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
+    {
+        USUM_LOG(USUM_LOG_ERROR, "Failed to set blk dev\n");
+        return -1;
+    }
+
+    // 读取整个 img.txt 文件
+    loff_t len;
+    if (fs_read(USUM_IMG_TXT_PATH, (ulong)buf, 0, file_size, &len)) 
+    {
+        USUM_LOG(USUM_LOG_ERROR, "Failed to read %s\n", USUM_IMG_TXT_PATH);
+        free(buf);
+        return 0;
+    }
+
+    buf[len] = '\0';
+
+	char *p, *line;
+    img_count = 0;
+    p = buf;
+    while ((line = strsep(&p, "\n")) != NULL) 
+	{
+        // 去掉换行符
+        while (*line == '\r' || *line == '\n') 
+			line++;
+
+        if (line[0] == '[') 
+		{
+            if (img_count >= USUM_IMG_TXT_MAX_IMG_CONFIGS)
+                break;
+
+            char *end = strchr(line, ']');
+            if (!end) 
+				continue;
+
+            *end = '\0';  // 截断 ']'
+            strncpy(img_list[img_count].name, line + 1, sizeof(img_list[img_count].name) - 1);
+        } 
+		else if (strstr(line, "LBA=")) 
+		{
+            img_list[img_count].addr_start = simple_strtoul(line + 4, NULL, 0);
+        } 
+		else if (strstr(line, "SIZE=")) 
+		{
+            img_list[img_count].size = simple_strtoul(line + 5, NULL, 0);
+            img_count++;
+        }
+    }
+
+    free(buf);
+    return 0;
+}
+
 static void read_line(char *buf, int maxlen)
 {
     int i = 0;
@@ -143,6 +233,35 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 			usum_log(USUM_LOG_ERROR, "Failed to select storage device %s\n", storage_dev[selected_id]);
 			continue;
 		}
+
+		// 解析镜像配置文件
+		ret = parse_img_config_file(USUM_IMG_TXT_PATH);
+		if (ret < 0)
+		{
+			usum_log(USUM_LOG_ERROR, "Failed to parse image config file %s\n", USUM_IMG_TXT_PATH);
+			continue;
+		}
+
+		// 打印二级菜单（可选择更新的镜像文件）
+		printf("\n========== %s ==========\n", "Imgs");
+		for (int i = 0; i < img_count; ++i) 
+		{
+			printf("[%d] %s  (LBA=0x%08x SIZE=0x%08x)\n",
+				i + 1,
+				img_list[i].name,
+				img_list[i].addr_start,
+				img_list[i].size);
+		}
+		printf("[r] return to previous menu\n");
+		printf("Select: ");
+
+		read_line(inbuf, sizeof(inbuf));
+		if (inbuf[0] == '\0')
+			continue;
+
+		// 返回上级菜单
+		if (inbuf[0] == 'r')    
+            continue;
     }
 
 	return 0;
