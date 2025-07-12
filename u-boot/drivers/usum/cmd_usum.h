@@ -18,10 +18,7 @@ typedef struct storage_configs {
 } storage_configs_t;
 
 typedef struct img_funs {
-    uint32_t (*compatible)(void);
-    uint32_t (*load)(void);
     uint32_t (*check)(void);
-    uint32_t (*download)(void);
 } img_funs_t;
 
 typedef struct img_config {
@@ -30,5 +27,7 @@ typedef struct img_config {
     uint32_t size;                      // 文件大小
     img_funs_t funs;                    // 镜像操作函数
 } img_config_t;
+
+void img_config_register(const img_config_t *cfg);
 
 #endif

@@ -10,10 +10,27 @@
 #include "cmd_usum.h"
 #include "log_usum.h"
 
+extern void img_boot_register(void);
+
 static storage_configs_t cfg;
+
+static img_config_t img_from_txt[USUM_IMG_TXT_MAX_IMG_CONFIGS];
+static int img_from_txt_count = 0;
 
 static img_config_t img_list[USUM_IMG_TXT_MAX_IMG_CONFIGS];
 static int img_count = 0;
+void img_config_register(const img_config_t *cfg)
+{
+    if (img_count >= USUM_IMG_TXT_MAX_IMG_CONFIGS)
+        return;
+
+    memcpy(&img_list[img_count++], cfg, sizeof(img_config_t));
+}
+
+static void register_all_img_configs(void)
+{
+    img_boot_register(); 
+}
 
 static int parse_img_config_file(const char *filepath)
 {
@@ -66,7 +83,7 @@ static int parse_img_config_file(const char *filepath)
     buf[len] = '\0';
 
 	char *p, *line;
-    img_count = 0;
+    img_from_txt_count = 0;
     p = buf;
     while ((line = strsep(&p, "\n")) != NULL) 
 	{
@@ -76,7 +93,7 @@ static int parse_img_config_file(const char *filepath)
 
         if (line[0] == '[') 
 		{
-            if (img_count >= USUM_IMG_TXT_MAX_IMG_CONFIGS)
+            if (img_from_txt_count >= USUM_IMG_TXT_MAX_IMG_CONFIGS)
                 break;
 
             char *end = strchr(line, ']');
@@ -84,16 +101,16 @@ static int parse_img_config_file(const char *filepath)
 				continue;
 
             *end = '\0';  // 截断 ']'
-            strncpy(img_list[img_count].name, line + 1, sizeof(img_list[img_count].name) - 1);
+            strncpy(img_from_txt[img_from_txt_count].name, line + 1, sizeof(img_from_txt[img_from_txt_count].name) - 1);
         } 
 		else if (strstr(line, "LBA=")) 
 		{
-            img_list[img_count].addr_start = simple_strtoul(line + 4, NULL, 0);
+            img_from_txt[img_from_txt_count].addr_start = simple_strtoul(line + 4, NULL, 0);
         } 
 		else if (strstr(line, "SIZE=")) 
 		{
-            img_list[img_count].size = simple_strtoul(line + 5, NULL, 0);
-            img_count++;
+            img_from_txt[img_from_txt_count].size = simple_strtoul(line + 5, NULL, 0);
+            img_from_txt_count++;
         }
     }
 
@@ -195,74 +212,148 @@ static int selected_storage_dev(char *dev, storage_configs_t *cfg)
 	return 0;
 }
 
+static int selected_img(int selected_id, img_config_t *img)
+{
+	if (selected_id < 0 || selected_id >= img_from_txt_count) 
+	{
+		usum_log(USUM_LOG_ERROR, "Invalid image selection: %d\n", selected_id);
+		return -1;
+	}
+
+	// 检查镜像名称是否与已注册的镜像配置匹配
+	for (int i = 0; i < img_count; i++)
+	{
+		if (strcmp(img_from_txt[selected_id].name, img_list[i].name) == 0) 
+		{
+			usum_log(USUM_LOG_INFO, "Image %s is registered.\n", img_from_txt[selected_id].name);
+			break;
+		}
+		else
+		{
+			usum_log(USUM_LOG_WARN, "Image %s is not registered.\n", img_from_txt[selected_id].name);
+			return -1;
+		}
+	}
+
+	// 查看所选镜像是否存在于存储设备中
+	char dev_part[10];
+	snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg.stroage_dev_num, cfg.stroage_partition);
+	if (fs_set_blk_dev(cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
+	{
+		usum_log(USUM_LOG_ERROR, "Failed to set block device\n");
+		return -1;
+	}
+	loff_t file_size;
+	if (fs_size(img_from_txt[selected_id].name, &file_size)) 
+	{
+		usum_log(USUM_LOG_ERROR, "Can not find image %s in current stroage devices.\n", img_from_txt[selected_id].name);
+		return -1;
+	}
+
+	// 复制起始地址和文件大小
+	img_list[selected_id].addr_start = img_from_txt[selected_id].addr_start;
+	img_list[selected_id].size = img_from_txt[selected_id].size;
+
+	// 复制选中的镜像配置
+	memcpy(img, &img_list[selected_id], sizeof(img_config_t));
+	usum_log(USUM_LOG_INFO, "Selected image: %s (LBA=0x%08x SIZE=0x%08x)\n", img->name, img->addr_start, img->size);
+
+	return 0;
+}
+
 static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv[])
 {  
 	char *storage_dev[] = {USUM_STORAGE_UDISK, USUM_STORAGE_SDCARD};
 	int storage_dev_count = sizeof(storage_dev) / sizeof(storage_dev[0]);
 	char inbuf[16] = {0};
 	int ret;
+	int selected_id;
+	
+	register_all_img_configs();
 
-	while (1) 
-	{
-		// 打印菜单
-        printf("\n========== %s ==========\n", "USUM");
-        for (int i = 0; i < storage_dev_count; i++) 
+	while (1)
+	{	
+		// 打印一级菜单（存储介质选择）
+		while (1) 
 		{
-            printf("[%d] %s\n", i + 1, storage_dev[i]);
-        }
-		printf("[q] quit\n");
-		printf("Select: ");
+			printf("\n========== %s ==========\n", "USUM");
+			for (int i = 0; i < storage_dev_count; i++) 
+			{
+				printf("[%d] %s\n", i + 1, storage_dev[i]);
+			}
+			printf("[q] quit\n");
+			printf("Select: ");
 
-		read_line(inbuf, sizeof(inbuf));
-		if (inbuf[0] == '\0')
-			continue;
+			read_line(inbuf, sizeof(inbuf));
+			if (inbuf[0] == '\0')
+				continue;
 
-		// 退出菜单
-		if (inbuf[0] == 'q')    
-            break;
+			// 退出菜单
+			if (inbuf[0] == 'q')    
+				return 0;
 
-		// 输入检查
-		int selected_id = inbuf[0] - '1';
-		if (selected_id < 0 || selected_id >= storage_dev_count) 
-			continue;
+			// 输入检查
+			selected_id = inbuf[0] - '1';
+			if (selected_id < 0 || selected_id >= storage_dev_count) 
+				continue;
 
-		// 存储介质选择
-		ret = selected_storage_dev(storage_dev[selected_id], &cfg);
-		if (ret < 0)
-		{
-			usum_log(USUM_LOG_ERROR, "Failed to select storage device %s\n", storage_dev[selected_id]);
-			continue;
-		}
+			// 存储介质选择
+			ret = selected_storage_dev(storage_dev[selected_id], &cfg);
+			if (ret < 0)
+			{
+				usum_log(USUM_LOG_ERROR, "Failed to select storage device %s\n", storage_dev[selected_id]);
+				continue;
+			}
 
-		// 解析镜像配置文件
-		ret = parse_img_config_file(USUM_IMG_TXT_PATH);
-		if (ret < 0)
-		{
-			usum_log(USUM_LOG_ERROR, "Failed to parse image config file %s\n", USUM_IMG_TXT_PATH);
-			continue;
+			// 解析镜像配置文件
+			ret = parse_img_config_file(USUM_IMG_TXT_PATH);
+			if (ret < 0)
+			{
+				usum_log(USUM_LOG_ERROR, "Failed to parse image config file %s\n", USUM_IMG_TXT_PATH);
+				continue;
+			}
+
+			break;  // 成功选择存储介质，跳出循环
 		}
 
 		// 打印二级菜单（可选择更新的镜像文件）
-		printf("\n========== %s ==========\n", "Imgs");
-		for (int i = 0; i < img_count; ++i) 
+		while (1)
 		{
-			printf("[%d] %s  (LBA=0x%08x SIZE=0x%08x)\n",
-				i + 1,
-				img_list[i].name,
-				img_list[i].addr_start,
-				img_list[i].size);
+			printf("\n========== %s ==========\n", "Imgs");
+			for (int i = 0; i < img_from_txt_count; ++i) 
+			{
+				printf("[%d] %s  (LBA=0x%08x SIZE=0x%08x)\n",
+					i + 1,
+					img_from_txt[i].name,
+					img_from_txt[i].addr_start,
+					img_from_txt[i].size);
+			}
+			printf("[r] return to previous menu\n");
+			printf("Select: ");
+
+			read_line(inbuf, sizeof(inbuf));
+			if (inbuf[0] == '\0')
+				continue;
+
+			// 返回上级菜单
+			if (inbuf[0] == 'r')    
+				break;
+
+			// 输入检查
+			selected_id = inbuf[0] - '1';
+			if (selected_id < 0 || selected_id >= img_from_txt_count) 
+				continue;
+
+			// 选择镜像文件进行更新
+			img_config_t sel_img;
+			ret = selected_img(selected_id, &sel_img);
+			if (ret < 0)
+			{
+				usum_log(USUM_LOG_ERROR, "Failed to select image %s\n", img_from_txt[selected_id].name);
+				continue;
+			}
 		}
-		printf("[r] return to previous menu\n");
-		printf("Select: ");
-
-		read_line(inbuf, sizeof(inbuf));
-		if (inbuf[0] == '\0')
-			continue;
-
-		// 返回上级菜单
-		if (inbuf[0] == 'r')    
-            continue;
-    }
+	}
 
 	return 0;
 }
