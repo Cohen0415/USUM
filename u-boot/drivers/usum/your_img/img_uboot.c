@@ -1,11 +1,26 @@
 #include <stdio.h>
 
 #include "../cmd_usum.h"
-#include "../log_usum.h"
 
-static uint32_t check_uboot(void) 
+// <Rockchip_Developer_Guide_UBoot_Nextdev_CN.pdf> - Page 29
+#define UBOOT_MAGIC 0xedfe0dd0
+static uint32_t check_uboot(const void *img_addr) 
 {
     printf("checking uboot.img ...\n");
+
+    if (!img_addr) 
+    {
+        printf("Invalid image address\n");
+        return -1;
+    }
+
+    uint32_t magic = *(uint32_t *)img_addr;
+    if (magic != UBOOT_MAGIC) 
+    {
+        printf("Invalid uboot magic: 0x%08x\n", magic);
+        return -1;
+    }
+
     return 0;
 }
 

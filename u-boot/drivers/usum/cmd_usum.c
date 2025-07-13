@@ -258,7 +258,7 @@ static int selected_img(int selected_id, img_config_t *img)
 
 	// 复制选中的镜像配置
 	memcpy(img, &img_list[selected_id], sizeof(img_config_t));
-	usum_log(USUM_LOG_INFO, "Selected image: %s (LBA=0x%08x SIZE=0x%08x)\n", img->name, img->addr_start, img->size);
+	usum_log(USUM_LOG_INFO, "Selected image: %s\n", img->name);
 
 	return 0;
 }
@@ -270,6 +270,45 @@ static int download_image(const img_config_t *img)
 		usum_log(USUM_LOG_ERROR, "Invalid image configuration.\n");
 		return -1;
 	}
+
+	// 加载镜像到内存
+	char dev_part[10];
+    snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg.stroage_dev_num, cfg.stroage_partition);
+    if (fs_set_blk_dev(cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
+    {
+        USUM_LOG(USUM_LOG_ERROR, "Failed to set blk dev\n");
+        return -1;
+    }
+
+	loff_t file_size;
+    if (fs_size(img->name, &file_size)) 
+    {
+        USUM_LOG(USUM_LOG_ERROR, "Failed to get size of %s\n", img->name);
+        return -1;
+    }
+    if (file_size == 0)
+        return -1;
+	USUM_LOG(USUM_LOG_INFO, "%s size: %lld Mbytes\n", img->name, file_size / (1024 * 1024));
+    
+	// load mmc 0:1 0x20000000 uboot.img
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "load %s %s 0x%08x %s", cfg.stroage_type, dev_part, USUM_LOAD_ADDR, img->name);
+
+    USUM_LOG(USUM_LOG_INFO, "Running command: %s\n", cmd);
+    if (run_command(cmd, 0)) \
+	{
+        USUM_LOG(USUM_LOG_ERROR, "Command failed: %s\n", cmd);
+        return -1;
+    }
+
+	// 用户自定义镜像的fops中的check函数，检查待更新镜像是否有效
+	int ret = img->funs.check((const void *)USUM_LOAD_ADDR);
+    if (ret < 0) 
+	{
+        USUM_LOG(USUM_LOG_ERROR, "Image check failed for %s\n", img->name);
+        return -1;
+    }
+	USUM_LOG(USUM_LOG_INFO, "Image check passed for %s\n", img->name);
 
 	return 0;
 }
@@ -335,11 +374,10 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 			printf("\n========== %s ==========\n", "Imgs");
 			for (int i = 0; i < img_from_txt_count; ++i) 
 			{
-				printf("[%d] %s  (LBA=0x%08x SIZE=0x%08x)\n",
+				printf("[%d] %s  (LBA=0x%08x)\n",
 					i + 1,
 					img_from_txt[i].name,
-					img_from_txt[i].addr_start,
-					img_from_txt[i].size);
+					img_from_txt[i].addr_start);
 			}
 			printf("[r] return to previous menu\n");
 			printf("Select: ");

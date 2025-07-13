@@ -10,6 +10,8 @@
 #define USUM_IMG_TXT_MAX_LINE_LEN       128             // 镜像配置文件每行最大长度
 #define USUM_IMG_TXT_MAX_IMG_CONFIGS    16              // 镜像配置文件所支持的最大镜像数量
 
+#define USUM_LOAD_ADDR                  0x20000000      // 镜像加载地址（uboot执行bdinfo查看）   
+
 #define MAX_CFG_LEN 32              
 typedef struct storage_configs {
     char stroage_type[MAX_CFG_LEN];  
@@ -18,7 +20,7 @@ typedef struct storage_configs {
 } storage_configs_t;
 
 typedef struct img_funs {
-    uint32_t (*check)(void);
+    uint32_t (*check)(const void *img_addr);
 } img_funs_t;
 
 typedef struct img_config {
