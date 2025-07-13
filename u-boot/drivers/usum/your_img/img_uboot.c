@@ -1,7 +1,7 @@
 #include <stdio.h>
 
-#include "cmd_usum.h"
-#include "log_usum.h"
+#include "../cmd_usum.h"
+#include "../log_usum.h"
 
 static uint32_t check_uboot(void) 
 {
