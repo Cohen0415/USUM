@@ -12,7 +12,8 @@
 
 extern void img_uboot_register(void);
 
-static storage_configs_t cfg;
+static storage_configs_t src_storage_cfg;		// 待更新镜像所在的存储介质配置
+static storage_configs_t dest_storage_cfg;		// 需要更新的存储介质配置
 
 static img_config_t img_from_txt[USUM_IMG_TXT_MAX_IMG_CONFIGS];
 static int img_from_txt_count = 0;
@@ -35,8 +36,8 @@ static void register_all_img_configs(void)
 static int parse_img_config_file(const char *filepath)
 {
     char dev_part[10];
-    snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg.stroage_dev_num, cfg.stroage_partition);
-    if (fs_set_blk_dev(cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
+    snprintf(dev_part, sizeof(dev_part), "%s:%s", src_storage_cfg.stroage_dev_num, src_storage_cfg.stroage_partition);
+    if (fs_set_blk_dev(src_storage_cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
     {
         USUM_LOG(USUM_LOG_ERROR, "Failed to set blk dev\n");
         return -1;
@@ -65,7 +66,7 @@ static int parse_img_config_file(const char *filepath)
         return 0;
     }
 
-	if (fs_set_blk_dev(cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
+	if (fs_set_blk_dev(src_storage_cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
     {
         USUM_LOG(USUM_LOG_ERROR, "Failed to set blk dev\n");
         return -1;
@@ -152,7 +153,7 @@ static void read_line(char *buf, int maxlen)
     buf[i] = '\0';
 }
 
-static int selected_storage_dev(char *dev, storage_configs_t *cfg)
+static int selected_src_storage_dev(char *dev, storage_configs_t *cfg)
 {
 	memset(cfg, 0, sizeof(storage_configs_t));
 
@@ -204,10 +205,41 @@ static int selected_storage_dev(char *dev, storage_configs_t *cfg)
 	if (fs_set_blk_dev(cfg->stroage_type, dev_part, USUM_FS_TYPE)) 
 		return -1;
 
-	usum_log(USUM_LOG_INFO, "Storage configuration:\n");
+	usum_log(USUM_LOG_INFO, "Source storage configuration:\n");
 	usum_log(USUM_LOG_INFO, "- Type: %s\n", cfg->stroage_type);
 	usum_log(USUM_LOG_INFO, "- Device Number: %s\n", cfg->stroage_dev_num);	
 	usum_log(USUM_LOG_INFO, "- Partition: %s\n", cfg->stroage_partition);
+
+	return 0;
+}
+
+static int selected_dest_storage_dev(storage_configs_t *cfg)
+{
+	memset(cfg, 0, sizeof(storage_configs_t));
+
+	// init stroage_type
+	strncpy(cfg->stroage_type, "mmc", MAX_CFG_LEN - 1);
+
+	char inbuf[10] = {0};
+
+	// init stroage_dev_num
+	printf("Enter destination %s device number (default 0): ", cfg->stroage_type);
+	read_line(inbuf, sizeof(inbuf));
+	if (inbuf[0] != '\0')
+	{
+		strncpy(cfg->stroage_dev_num, inbuf, MAX_CFG_LEN - 1);
+	}
+	else 
+	{
+		strncpy(cfg->stroage_dev_num, "0", MAX_CFG_LEN - 1);
+	}
+	
+	// init stroage_partition
+	strncpy(cfg->stroage_partition, "1", MAX_CFG_LEN - 1);
+
+	usum_log(USUM_LOG_INFO, "Destination storage configuration:\n");
+	usum_log(USUM_LOG_INFO, "- Type: %s\n", cfg->stroage_type);
+	usum_log(USUM_LOG_INFO, "- Device Number: %s\n", cfg->stroage_dev_num);	
 
 	return 0;
 }
@@ -239,8 +271,8 @@ static int selected_img(int selected_id, img_config_t *img)
 
 	// 查看所选镜像是否存在于存储设备中
 	char dev_part[10];
-	snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg.stroage_dev_num, cfg.stroage_partition);
-	if (fs_set_blk_dev(cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
+	snprintf(dev_part, sizeof(dev_part), "%s:%s", src_storage_cfg.stroage_dev_num, src_storage_cfg.stroage_partition);
+	if (fs_set_blk_dev(src_storage_cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
 	{
 		usum_log(USUM_LOG_ERROR, "Failed to set block device\n");
 		return -1;
@@ -263,7 +295,7 @@ static int selected_img(int selected_id, img_config_t *img)
 	return 0;
 }
 
-static int download_image(const img_config_t *img)
+static int download_image(img_config_t *img)
 {
 	if (!img || img->addr_start == 0 || img->size == 0) 
 	{
@@ -273,8 +305,8 @@ static int download_image(const img_config_t *img)
 
 	// 加载镜像到内存
 	char dev_part[10];
-    snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg.stroage_dev_num, cfg.stroage_partition);
-    if (fs_set_blk_dev(cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
+    snprintf(dev_part, sizeof(dev_part), "%s:%s", src_storage_cfg.stroage_dev_num, src_storage_cfg.stroage_partition);
+    if (fs_set_blk_dev(src_storage_cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
     {
         USUM_LOG(USUM_LOG_ERROR, "Failed to set blk dev\n");
         return -1;
@@ -287,15 +319,18 @@ static int download_image(const img_config_t *img)
         return -1;
     }
     if (file_size == 0)
+	{
         return -1;
-	USUM_LOG(USUM_LOG_INFO, "%s size: %lld Mbytes\n", img->name, file_size / (1024 * 1024));
+	}
+	img->size = file_size;
+	USUM_LOG(USUM_LOG_INFO, "%s size: %lld Mbytes\n", img->name, img->size / (1024 * 1024));
     
 	// load mmc 0:1 0x20000000 uboot.img
     char cmd[128];
-    snprintf(cmd, sizeof(cmd), "load %s %s 0x%08x %s", cfg.stroage_type, dev_part, USUM_LOAD_ADDR, img->name);
+    snprintf(cmd, sizeof(cmd), "load %s %s 0x%08x %s", src_storage_cfg.stroage_type, dev_part, USUM_LOAD_ADDR, img->name);
 
     USUM_LOG(USUM_LOG_INFO, "Running command: %s\n", cmd);
-    if (run_command(cmd, 0)) \
+    if (run_command(cmd, 0)) 
 	{
         USUM_LOG(USUM_LOG_ERROR, "Command failed: %s\n", cmd);
         return -1;
@@ -309,6 +344,16 @@ static int download_image(const img_config_t *img)
         return -1;
     }
 	USUM_LOG(USUM_LOG_INFO, "Image check passed for %s\n", img->name);
+
+	// 下载镜像
+	unsigned long blk_count = (img->size + 511) / 512;  // 向上对齐
+	snprintf(cmd, sizeof(cmd), "mmc write 0x%lx 0x%lx 0x%lx", (unsigned long)USUM_LOAD_ADDR, (unsigned long)img->addr_start, blk_count);
+	USUM_LOG(USUM_LOG_INFO, "Running command: %s\n", cmd);
+	if (run_command(cmd, 0)) 
+	{
+		USUM_LOG(USUM_LOG_ERROR, "Command failed: %s\n", cmd);
+		return -1;
+	}
 
 	return 0;
 }
@@ -349,11 +394,20 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 			if (selected_id < 0 || selected_id >= storage_dev_count) 
 				continue;
 
-			// 存储介质选择
-			ret = selected_storage_dev(storage_dev[selected_id], &cfg);
+			// 待更新镜像所在的存储设备选择
+			ret = selected_src_storage_dev(storage_dev[selected_id], &src_storage_cfg);
 			if (ret < 0)
 			{
 				usum_log(USUM_LOG_ERROR, "Failed to select storage device %s\n", storage_dev[selected_id]);
+				continue;
+			}
+
+			// 需要更新的存储介质设备选择
+			printf("\n");
+			ret = selected_dest_storage_dev(&dest_storage_cfg);
+			if (ret < 0)
+			{
+				usum_log(USUM_LOG_ERROR, "Failed to select destination storage device\n");
 				continue;
 			}
 
