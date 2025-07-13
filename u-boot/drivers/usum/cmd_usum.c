@@ -10,7 +10,6 @@
 #include "cmd_usum.h"
 #include "log_usum.h"
 
-extern void img_boot_register(void);
 extern void img_uboot_register(void);
 
 static storage_configs_t cfg;
@@ -30,7 +29,6 @@ void img_config_register(const img_config_t *cfg)
 
 static void register_all_img_configs(void)
 {
-    img_boot_register();
 	img_uboot_register();  
 }
 
