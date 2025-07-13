@@ -221,18 +221,20 @@ static int selected_img(int selected_id, img_config_t *img)
 	}
 
 	// 检查镜像名称是否与已注册的镜像配置匹配
+	int ret = 1;
 	for (int i = 0; i < img_count; i++)
 	{
 		if (strcmp(img_from_txt[selected_id].name, img_list[i].name) == 0) 
 		{
 			usum_log(USUM_LOG_INFO, "Image %s is registered.\n", img_from_txt[selected_id].name);
+			ret = 0;
 			break;
 		}
-		else
-		{
-			usum_log(USUM_LOG_WARN, "Image %s is not registered.\n", img_from_txt[selected_id].name);
-			return -1;
-		}
+	}
+	if (ret) 
+	{
+		usum_log(USUM_LOG_ERROR, "Image %s is not registered.\n", img_from_txt[selected_id].name);
+		return -1;
 	}
 
 	// 查看所选镜像是否存在于存储设备中
