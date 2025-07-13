@@ -261,6 +261,17 @@ static int selected_img(int selected_id, img_config_t *img)
 	return 0;
 }
 
+static int download_image(const img_config_t *img)
+{
+	if (!img || img->addr_start == 0 || img->size == 0) 
+	{
+		usum_log(USUM_LOG_ERROR, "Invalid image configuration.\n");
+		return -1;
+	}
+
+	return 0;
+}
+
 static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv[])
 {  
 	char *storage_dev[] = {USUM_STORAGE_UDISK, USUM_STORAGE_SDCARD};
@@ -268,7 +279,7 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 	char inbuf[16] = {0};
 	int ret;
 	int selected_id;
-	
+
 	register_all_img_configs();
 
 	while (1)
@@ -352,6 +363,15 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 				usum_log(USUM_LOG_ERROR, "Failed to select image %s\n", img_from_txt[selected_id].name);
 				continue;
 			}
+
+			// 镜像下载
+			ret = download_image(&sel_img);
+			if (ret < 0)
+			{
+				usum_log(USUM_LOG_ERROR, "Failed to download image %s\n", img_from_txt[selected_id].name);
+				continue;
+			}
+			usum_log(USUM_LOG_INFO, "Image %s downloaded successfully.\n", sel_img.name);
 		}
 	}
 
