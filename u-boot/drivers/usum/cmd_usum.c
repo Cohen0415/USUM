@@ -379,12 +379,20 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 			{
 				printf("[%d] %s\n", i + 1, storage_dev[i]);
 			}
-			printf("[q] quit\n");
+			printf("[r] reboot: restart the system without saving changes\n");
+            printf("[q] quit:   quit the menu without saving changes\n");
 			printf("Select: ");
 
 			read_line(inbuf, sizeof(inbuf));
 			if (inbuf[0] == '\0')
 				continue;
+			
+			// 重启系统
+			if (inbuf[0] == 'r')    
+            {
+                run_command("reboot", 0);
+                return 0;
+            }
 
 			// 退出菜单
 			if (inbuf[0] == 'q')    
