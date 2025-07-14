@@ -19,16 +19,18 @@ typedef struct storage_configs {
     char stroage_partition[MAX_CFG_LEN];
 } storage_configs_t;
 
+typedef struct img_config img_config_t;
 typedef struct img_funs {
     uint32_t (*check)(const void *img_addr);
+    uint32_t (*download)(img_config_t *img, uint32_t img_addr);
 } img_funs_t;
 
-typedef struct img_config {
-    char name[64];                      // 镜像名称，如 "boot.img"
-    uint32_t addr_start;                // 起始 LBA
-    uint32_t size;                      // 文件大小
-    img_funs_t funs;                    // 镜像操作函数
-} img_config_t;
+struct img_config {
+    char name[64];
+    uint32_t addr_start;
+    uint32_t size;
+    img_funs_t funs;
+};
 
 void img_config_register(const img_config_t *cfg);
 

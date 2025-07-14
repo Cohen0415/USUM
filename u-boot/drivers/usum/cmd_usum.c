@@ -346,14 +346,13 @@ static int download_image(img_config_t *img)
 	USUM_LOG(USUM_LOG_INFO, "Image check passed for %s\n", img->name);
 
 	// 下载镜像
-	unsigned long blk_count = (img->size + 511) / 512;  // 向上对齐
-	snprintf(cmd, sizeof(cmd), "mmc write 0x%lx 0x%lx 0x%lx", (unsigned long)USUM_LOAD_ADDR, (unsigned long)img->addr_start, blk_count);
-	USUM_LOG(USUM_LOG_INFO, "Running command: %s\n", cmd);
-	if (run_command(cmd, 0)) 
+	ret = img->funs.download(img, USUM_LOAD_ADDR);
+	if (ret < 0) 
 	{
-		USUM_LOG(USUM_LOG_ERROR, "Command failed: %s\n", cmd);
+		USUM_LOG(USUM_LOG_ERROR, "Image download failed for %s\n", img->name);
 		return -1;
 	}
+	USUM_LOG(USUM_LOG_INFO, "Image download successful for %s\n", img->name);
 
 	return 0;
 }
