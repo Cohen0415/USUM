@@ -10,7 +10,7 @@
 #include "../cmd_usum.h"
 
 #define BOOT_MAGIC 0xedfe0dd0
-static uint32_t check_boot(const void *img_addr) 
+static uint32_t check_boot(img_config_t *img, const void *img_addr) 
 {
     printf("checking boot.img ...\n");
 

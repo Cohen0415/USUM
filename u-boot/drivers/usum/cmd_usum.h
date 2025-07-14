@@ -21,7 +21,7 @@ typedef struct storage_configs {
 
 typedef struct img_config img_config_t;
 typedef struct img_funs {
-    uint32_t (*check)(const void *img_addr);
+    uint32_t (*check)(img_config_t *img, const void *img_addr);
     uint32_t (*download)(img_config_t *img, uint32_t img_addr);
 } img_funs_t;
 

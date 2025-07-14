@@ -11,7 +11,7 @@
 
 // <Rockchip_Developer_Guide_UBoot_Nextdev_CN.pdf> - Page 29
 #define UBOOT_MAGIC 0xedfe0dd0
-static uint32_t check_uboot(const void *img_addr) 
+static uint32_t check_uboot(img_config_t *img, const void *img_addr) 
 {
     printf("checking uboot.img ...\n");
 

@@ -339,7 +339,7 @@ static int download_image(img_config_t *img)
     }
 
 	// 用户自定义镜像的fops中的check函数，检查待更新镜像是否有效
-	int ret = img->funs.check((const void *)USUM_LOAD_ADDR);
+	int ret = img->funs.check(img, (const void *)USUM_LOAD_ADDR);
     if (ret < 0) 
 	{
         USUM_LOG(USUM_LOG_ERROR, "Image check failed for %s\n", img->name);
