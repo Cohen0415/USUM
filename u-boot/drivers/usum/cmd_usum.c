@@ -11,6 +11,7 @@
 #include "log_usum.h"
 
 extern void img_uboot_register(void);
+extern void img_boot_register(void);
 
 static storage_configs_t src_storage_cfg;		// 待更新镜像所在的存储介质配置
 static storage_configs_t dest_storage_cfg;		// 需要更新的存储介质配置
@@ -31,6 +32,7 @@ void img_config_register(const img_config_t *cfg)
 static void register_all_img_configs(void)
 {
 	img_uboot_register();  
+	img_boot_register(); 
 }
 
 static int parse_img_config_file(const char *filepath)
