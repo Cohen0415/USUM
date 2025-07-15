@@ -14,9 +14,21 @@ static uint32_t check_boot(img_config_t *img, const void *img_addr)
 {
     printf("checking boot.img ...\n");
 
-    if (!img_addr) 
+    if (!img || !img_addr) 
     {
-        printf("Invalid image address\n");
+        printf("Invalid image configuration or address\n");      
+        return -1;
+    }
+
+    if (img->size == 0) 
+    {
+        printf("Image size is zero, cannot check uboot\n");
+        return -1;
+    }
+
+    if (img->size > 0x10000000) 
+    {
+        printf("%s size exceeds maximum limit (100MB): %u bytes\n", img->name, img->size / (1024 * 1024));
         return -1;
     }
 
@@ -32,9 +44,9 @@ static uint32_t check_boot(img_config_t *img, const void *img_addr)
 
 static uint32_t download_boot(img_config_t *img, uint32_t img_addr) 
 {
-    if (!img || !img_addr) 
+    if (!img) 
     {
-        printf("Invalid image configuration or address\n");
+        printf("Invalid image configuration\n");
         return -1;
     }
 
