@@ -9,8 +9,23 @@
 
 #include "../cmd_usum.h"
 
+static uint32_t load_boot(img_config_t *img, storage_configs_t *cfg, uint32_t img_addr)
+{
+    char cmd[128];
+    char dev_part[10];
+    snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg->stroage_dev_num, cfg->stroage_partition);
+    snprintf(cmd, sizeof(cmd), "load %s %s 0x%08x %s", cfg->stroage_type, dev_part, img_addr, img->name);
+
+    if (run_command(cmd, 0)) 
+	{
+        return -1;
+    }
+
+    return 0;
+}
+
 #define BOOT_MAGIC 0xedfe0dd0
-static uint32_t check_boot(img_config_t *img, const void *img_addr) 
+static uint32_t check_boot(img_config_t *img, storage_configs_t *cfg, const void *img_addr) 
 {
     printf("checking boot.img ...\n");
 
@@ -42,7 +57,7 @@ static uint32_t check_boot(img_config_t *img, const void *img_addr)
     return 0;
 }
 
-static uint32_t download_boot(img_config_t *img, uint32_t img_addr) 
+static uint32_t download_boot(img_config_t *img, storage_configs_t *cfg, uint32_t img_addr) 
 {
     if (!img) 
     {
@@ -67,6 +82,7 @@ static const img_config_t img_boot = {
     .addr_start = 0,
     .size = 0,
     .funs = {
+        .load = load_boot,
         .check = check_boot,
         .download = download_boot,
     },

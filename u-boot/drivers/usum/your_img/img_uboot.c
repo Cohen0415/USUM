@@ -9,9 +9,25 @@
 
 #include "../cmd_usum.h"
 
+static uint32_t load_uboot(img_config_t *img, storage_configs_t *cfg, uint32_t img_addr)
+{
+    // load mmc 0:1 0x20000000 uboot.img
+    char cmd[128];
+    char dev_part[10];
+    snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg->stroage_dev_num, cfg->stroage_partition);
+    snprintf(cmd, sizeof(cmd), "load %s %s 0x%08x %s", cfg->stroage_type, dev_part, img_addr, img->name);
+
+    if (run_command(cmd, 0)) 
+	{
+        return -1;
+    }
+
+    return 0;
+}
+
 // <Rockchip_Developer_Guide_UBoot_Nextdev_CN.pdf> - Page 29
 #define UBOOT_MAGIC 0xedfe0dd0
-static uint32_t check_uboot(img_config_t *img, const void *img_addr) 
+static uint32_t check_uboot(img_config_t *img, storage_configs_t *cfg, const void *img_addr) 
 {
     printf("checking uboot.img ...\n");
 
@@ -43,7 +59,7 @@ static uint32_t check_uboot(img_config_t *img, const void *img_addr)
     return 0;
 }
 
-static uint32_t download_uboot(img_config_t *img, uint32_t img_addr) 
+static uint32_t download_uboot(img_config_t *img, storage_configs_t *cfg, uint32_t img_addr) 
 {
     if (!img) 
     {
@@ -68,6 +84,7 @@ static const img_config_t img_uboot = {
     .addr_start = 0,
     .size = 0,
     .funs = {
+        .load = load_uboot,
         .check = check_uboot,
         .download = download_uboot,
     },

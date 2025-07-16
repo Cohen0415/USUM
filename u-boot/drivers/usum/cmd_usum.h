@@ -4,13 +4,14 @@
 #define USUM_STORAGE_UDISK              "udisk"
 #define USUM_STORAGE_SDCARD             "sdcard"
 
-#define USUM_FS_TYPE                    FS_TYPE_FAT     // 文件系统类型，目前支持FAT
+#define USUM_FS_TYPE                    FS_TYPE_FAT         // 文件系统类型，目前支持FAT
 
-#define USUM_IMG_TXT_PATH               "img.txt"       // 镜像配置文件路径
-#define USUM_IMG_TXT_MAX_LINE_LEN       128             // 镜像配置文件每行最大长度
-#define USUM_IMG_TXT_MAX_IMG_CONFIGS    16              // 镜像配置文件所支持的最大镜像数量
+#define USUM_IMG_TXT_PATH               "img.txt"           // 镜像配置文件路径
+#define USUM_IMG_TXT_MAX_LINE_LEN       128                 // 镜像配置文件每行最大长度
+#define USUM_IMG_TXT_MAX_IMG_CONFIGS    16                  // 镜像配置文件所支持的最大镜像数量
+#define USUM_IMG_MAX_SIZE              (500 * 1024 * 1024)  // 镜像最大大小（500MB）
 
-#define USUM_LOAD_ADDR                  0x20000000      // 镜像加载地址（uboot执行bdinfo查看）   
+#define USUM_LOAD_ADDR                  0x20000000          // 镜像加载地址（uboot执行bdinfo查看）   
 
 #define MAX_CFG_LEN 32              
 typedef struct storage_configs {
@@ -21,8 +22,9 @@ typedef struct storage_configs {
 
 typedef struct img_config img_config_t;
 typedef struct img_funs {
-    uint32_t (*check)(img_config_t *img, const void *img_addr);
-    uint32_t (*download)(img_config_t *img, uint32_t img_addr);
+    uint32_t (*load)(img_config_t *img, storage_configs_t *cfg, uint32_t img_addr);
+    uint32_t (*check)(img_config_t *img, storage_configs_t *cfg, const void *img_addr);
+    uint32_t (*download)(img_config_t *img, storage_configs_t *cfg, uint32_t img_addr);
 } img_funs_t;
 
 struct img_config {
