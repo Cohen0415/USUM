@@ -1,5 +1,9 @@
 # U-Boot System Update Manager (USUM)
 
+## 项目状态
+
+开发中...
+
 ## 项目简介
 
 USUM是一个基于U-Boot的镜像文件更新管理平台，支持内核（Kernel）、根文件系统（RootFS）等镜像文件的动态更新。  
