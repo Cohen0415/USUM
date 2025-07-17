@@ -378,8 +378,8 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 			{
 				printf("[%d] %s\n", i + 1, storage_dev[i]);
 			}
-			printf("[r] reboot: restart the system without saving changes\n");
-            printf("[q] quit:   quit the menu without saving changes\n");
+			printf("[r] reboot: restart the system\n");
+            printf("[q] quit:   quit the menu\n");
 			printf("Select: ");
 
 			read_line(inbuf, sizeof(inbuf));
@@ -436,12 +436,12 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 			printf("\n========== %s ==========\n", "Imgs");
 			for (int i = 0; i < img_from_txt_count; ++i) 
 			{
-				printf("[%d] %s  (LBA=0x%08x)\n",
+				printf("[%d] %s\t\t(LBA=0x%08x)\n",
 					i + 1,
 					img_from_txt[i].name,
 					img_from_txt[i].addr_start);
 			}
-			printf("[r] reboot: restart the system without saving changes\n");
+			printf("[r] reboot: restart the system\n");
 			printf("[b] back:   return to previous menu\n");
 			printf("Select: ");
 
