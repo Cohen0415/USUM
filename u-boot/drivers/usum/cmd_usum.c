@@ -441,15 +441,23 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 					img_from_txt[i].name,
 					img_from_txt[i].addr_start);
 			}
-			printf("[r] return to previous menu\n");
+			printf("[r] reboot: restart the system without saving changes\n");
+			printf("[b] back:   return to previous menu\n");
 			printf("Select: ");
 
 			read_line(inbuf, sizeof(inbuf));
 			if (inbuf[0] == '\0')
 				continue;
 
-			// 返回上级菜单
+			// 重启系统
 			if (inbuf[0] == 'r')    
+            {
+                run_command("reboot", 0);
+                return 0;
+            }
+
+			// 返回上级菜单
+			if (inbuf[0] == 'b')    
 				break;
 
 			// 输入检查
