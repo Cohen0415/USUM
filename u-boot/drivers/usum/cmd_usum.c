@@ -329,6 +329,11 @@ static int download_image(img_config_t *img)
 	USUM_LOG(USUM_LOG_INFO, "%s size: %lld Mbytes\n", img->name, img->size / (1024 * 1024));
 
 	// 加载镜像到指定内存
+	if (!img->funs.load) 
+	{
+		USUM_LOG(USUM_LOG_ERROR, "Image load function not implemented for %s\n", img->name);
+		return -1;
+	}
 	int ret = img->funs.load(img, &src_storage_cfg, USUM_LOAD_ADDR);
 	if (ret < 0)
 	{
@@ -338,6 +343,11 @@ static int download_image(img_config_t *img)
 	USUM_LOG(USUM_LOG_INFO, "Image load successful for %s\n", img->name);
 
 	// 用户自定义镜像的fops中的check函数，检查待更新镜像是否有效
+	if (!img->funs.check) 
+	{
+		USUM_LOG(USUM_LOG_ERROR, "Image check function not implemented for %s\n", img->name);
+		return -1;
+	}
 	ret = img->funs.check(img, &src_storage_cfg, (const void *)USUM_LOAD_ADDR);
     if (ret < 0) 
 	{
@@ -347,6 +357,11 @@ static int download_image(img_config_t *img)
 	USUM_LOG(USUM_LOG_INFO, "Image check passed for %s\n", img->name);
 
 	// 下载镜像
+	if (!img->funs.download) 
+	{
+		USUM_LOG(USUM_LOG_ERROR, "Image download function not implemented for %s\n", img->name);
+		return -1;
+	}
 	ret = img->funs.download(img, &src_storage_cfg, USUM_LOAD_ADDR);
 	if (ret < 0) 
 	{
