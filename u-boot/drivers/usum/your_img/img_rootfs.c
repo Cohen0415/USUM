@@ -11,16 +11,6 @@
 
 static uint32_t load_rootfs(img_config_t *img, storage_configs_t *cfg, uint32_t img_addr)
 {
-    char cmd[128];
-    char dev_part[10];
-    snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg->stroage_dev_num, cfg->stroage_partition);
-    snprintf(cmd, sizeof(cmd), "load %s %s 0x%08x %s", cfg->stroage_type, dev_part, img_addr, img->name);
-
-    if (run_command(cmd, 0)) 
-	{
-        return -1;
-    }
-
     return 0;
 }
 
@@ -69,24 +59,59 @@ static uint32_t check_rootfs(img_config_t *img, storage_configs_t *cfg, const vo
     return 0;
 }
 
-#define CHUNK_SIZE     (100 * 1024 * 1024)   // 每次最多处理 100MB 数据
+#define CHUNK_SIZE     (100 * 1024 * 1024)  // 每次操作的最大块大小（100MB）   
 static uint32_t download_rootfs(img_config_t *img, storage_configs_t *cfg, uint32_t img_addr) 
 {
-    if (!img) 
+    if (!img || !cfg) 
     {
-        printf("Invalid image configuration\n");
+        printf("Invalid image or storage config\n");
         return -1;
     }
 
-    char cmd[128];
-    unsigned long blk_count = (img->size + 511) / 512;  // 向上对齐
-	snprintf(cmd, sizeof(cmd), "mmc write 0x%08x 0x%lx 0x%lx", img_addr, (unsigned long)img->addr_start, blk_count);
-	if (run_command(cmd, 0)) 
-	{
-		printf("Command failed: %s\n", cmd);
-		return -1;
-	}
+    loff_t total_size = img->size;
+    loff_t offset = 0;
+    char cmd[256];
+    char dev_part[16];
 
+    // 格式如 "mmc 0:1"
+    snprintf(dev_part, sizeof(dev_part), "%s %s", cfg->stroage_type, cfg->stroage_dev_num);
+
+    printf("Downloading rootfs: %s, total size: %llu bytes\n", img->name, total_size);
+
+    while (offset < total_size) 
+    {
+        uint32_t chunk_size = (total_size - offset > CHUNK_SIZE) ? CHUNK_SIZE : (total_size - offset);
+
+        // 避免之前内存残留
+        memset((void *)(uintptr_t)img_addr, 0, chunk_size);
+
+        // 1. 加载分段镜像
+        snprintf(cmd, sizeof(cmd), "fatload %s 0x%08x %s 0x%x 0x%llx", dev_part, img_addr, img->name, chunk_size, offset);
+        if (run_command(cmd, 0)) 
+        {
+            printf("Failed to load chunk at offset 0x%llx\n", offset);
+            return -1;
+        }
+
+        // 2. 计算起始 LBA 与块数
+        uint32_t blk_count = (chunk_size + 511) / 512;
+        uint32_t blk_start = img->addr_start + (offset / 512);
+
+        // 3. 写入 eMMC
+        snprintf(cmd, sizeof(cmd), "mmc write 0x%08x 0x%x 0x%x", img_addr, blk_start, blk_count);
+        if (run_command(cmd, 0)) 
+        {
+            printf("Failed to write chunk at LBA 0x%x\n", blk_start);
+            return -1;
+        }
+
+        // 4. 显示进度
+        offset += chunk_size;
+        uint32_t percent = (uint32_t)(offset * 100 / total_size);
+        printf("[Progress] %3u%% (%llu / %llu bytes)\n", percent, offset, total_size);
+    }
+
+    printf("Rootfs download completed successfully.\n");
     return 0;
 }
 
