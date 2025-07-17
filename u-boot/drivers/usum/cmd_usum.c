@@ -25,7 +25,15 @@ static int img_count = 0;
 void img_config_register(const img_config_t *cfg)
 {
     if (img_count >= USUM_IMG_TXT_MAX_IMG_CONFIGS)
+	{
         return;
+	}
+	
+	if (!cfg || !cfg->name[0] || !cfg->funs.load || !cfg->funs.check || !cfg->funs.download)
+	{	
+		USUM_LOG(USUM_LOG_ERROR, "Invalid image configuration provided.\n");
+		return;
+	}
 
     memcpy(&img_list[img_count++], cfg, sizeof(img_config_t));
 }
@@ -111,13 +119,17 @@ static int parse_img_config_file(const char *filepath)
 		else if (strstr(line, "LBA=")) 
 		{
             img_from_txt[img_from_txt_count].addr_start = simple_strtoul(line + 4, NULL, 0);
-        } 
-		else if (strstr(line, "SIZE=")) 
-		{
-            img_from_txt[img_from_txt_count].size = simple_strtoul(line + 5, NULL, 0);
-            img_from_txt_count++;
+			img_from_txt_count++;
         }
     }
+
+	for (int i = 0; i < img_from_txt_count; i++)
+	{
+		img_from_txt[i].size = 0;
+		img_from_txt[i].funs.load = NULL;
+		img_from_txt[i].funs.check = NULL;
+		img_from_txt[i].funs.download = NULL;
+	}
 
     free(buf);
     return 0;
