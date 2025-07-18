@@ -14,14 +14,12 @@ extern void img_uboot_register(void);
 extern void img_boot_register(void);
 extern void img_rootfs_register(void);
 
-static storage_configs_t src_storage_cfg;		// 待更新镜像所在的存储介质配置
-static storage_configs_t dest_storage_cfg;		// 需要更新的存储介质配置
-
-static img_config_t img_from_txt[USUM_IMG_TXT_MAX_IMG_CONFIGS];
-static int img_from_txt_count = 0;
+img_config_t img_from_txt[USUM_IMG_TXT_MAX_IMG_CONFIGS];
+int img_from_txt_count = 0;
 
 static img_config_t img_list[USUM_IMG_TXT_MAX_IMG_CONFIGS];
 static int img_count = 0;
+
 void img_config_register(const img_config_t *cfg)
 {
     if (img_count >= USUM_IMG_TXT_MAX_IMG_CONFIGS)
@@ -45,20 +43,25 @@ static void register_all_img_configs(void)
 	img_rootfs_register();
 }
 
-static int parse_img_config_file(const char *filepath)
+static int parse_img_config_file(storage_configs_t *cfg, const char *filepath)
 {
+	if (!cfg || !filepath)
+	{
+		return -1;
+	}
+
     char dev_part[10];
-    snprintf(dev_part, sizeof(dev_part), "%s:%s", src_storage_cfg.stroage_dev_num, src_storage_cfg.stroage_partition);
-    if (fs_set_blk_dev(src_storage_cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
+    snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg->stroage_dev_num, cfg->stroage_partition);
+    if (fs_set_blk_dev(cfg->stroage_type, dev_part, USUM_FS_TYPE)) 
     {
         USUM_LOG(USUM_LOG_ERROR, "Failed to set blk dev\n");
         return -1;
     }
 
 	loff_t file_size;
-    if (fs_size(USUM_IMG_TXT_PATH, &file_size)) 
+    if (fs_size(filepath, &file_size)) 
     {
-        USUM_LOG(USUM_LOG_ERROR, "Failed to get size of %s\n", USUM_IMG_TXT_PATH);
+        USUM_LOG(USUM_LOG_ERROR, "Failed to get size of %s\n", filepath);
         return 0;
     }
 
@@ -78,7 +81,7 @@ static int parse_img_config_file(const char *filepath)
         return 0;
     }
 
-	if (fs_set_blk_dev(src_storage_cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
+	if (fs_set_blk_dev(cfg->stroage_type, dev_part, USUM_FS_TYPE)) 
     {
         USUM_LOG(USUM_LOG_ERROR, "Failed to set blk dev\n");
         return -1;
@@ -86,9 +89,9 @@ static int parse_img_config_file(const char *filepath)
 
     // 读取整个 img.txt 文件
     loff_t len;
-    if (fs_read(USUM_IMG_TXT_PATH, (ulong)buf, 0, file_size, &len)) 
+    if (fs_read(filepath, (ulong)buf, 0, file_size, &len)) 
     {
-        USUM_LOG(USUM_LOG_ERROR, "Failed to read %s\n", USUM_IMG_TXT_PATH);
+        USUM_LOG(USUM_LOG_ERROR, "Failed to read %s\n", filepath);
         free(buf);
         return 0;
     }
@@ -171,13 +174,18 @@ static void read_line(char *buf, int maxlen)
 
 static int selected_src_storage_dev(char *dev, storage_configs_t *cfg)
 {
+	if (!dev || !cfg)
+	{
+		return -1;
+	}
+	
 	memset(cfg, 0, sizeof(storage_configs_t));
 
 	// init stroage_type
 	if (strcmp(dev, USUM_STORAGE_UDISK) == 0) 
 	{
 		strncpy(cfg->stroage_type, "usb", MAX_CFG_LEN - 1);
-		run_command("usb start", 0);
+		run_command("usb reset", 0);
 	} 
 	else if (strcmp(dev, USUM_STORAGE_SDCARD) == 0) 
 	{
@@ -219,7 +227,12 @@ static int selected_src_storage_dev(char *dev, storage_configs_t *cfg)
 	char dev_part[10];
 	snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg->stroage_dev_num, cfg->stroage_partition);
 	if (fs_set_blk_dev(cfg->stroage_type, dev_part, USUM_FS_TYPE)) 
+	{
+		cfg->stroage_type[0] = '\0';  
+		cfg->stroage_dev_num[0] = '\0';  
+		cfg->stroage_partition[0] = '\0';  
 		return -1;
+	}
 
 	usum_log(USUM_LOG_INFO, "Source storage configuration:\n");
 	usum_log(USUM_LOG_INFO, "- Type: %s\n", cfg->stroage_type);
@@ -231,6 +244,11 @@ static int selected_src_storage_dev(char *dev, storage_configs_t *cfg)
 
 static int selected_dest_storage_dev(storage_configs_t *cfg)
 {
+	if (!cfg)
+	{
+		return -1;
+	}
+
 	memset(cfg, 0, sizeof(storage_configs_t));
 
 	// init stroage_type
@@ -249,9 +267,9 @@ static int selected_dest_storage_dev(storage_configs_t *cfg)
 	{
 		strncpy(cfg->stroage_dev_num, "0", MAX_CFG_LEN - 1);
 	}
-	
-	// init stroage_partition
-	strncpy(cfg->stroage_partition, "1", MAX_CFG_LEN - 1);
+
+	// not use stroage_partition
+	cfg->stroage_partition[0] = '\0';  // 清空分区信息
 
 	usum_log(USUM_LOG_INFO, "Destination storage configuration:\n");
 	usum_log(USUM_LOG_INFO, "- Type: %s\n", cfg->stroage_type);
@@ -260,8 +278,13 @@ static int selected_dest_storage_dev(storage_configs_t *cfg)
 	return 0;
 }
 
-static int selected_img(int selected_id, img_config_t *img)
+static int selected_img(int selected_id, storage_configs_t *cfg, img_config_t *img)
 {
+	if (!cfg || !img)
+	{
+		return -1;
+	}
+
 	if (selected_id < 0 || selected_id >= img_from_txt_count) 
 	{
 		usum_log(USUM_LOG_ERROR, "Invalid image selection: %d\n", selected_id);
@@ -287,8 +310,8 @@ static int selected_img(int selected_id, img_config_t *img)
 
 	// 查看所选镜像是否存在于存储设备中
 	char dev_part[10];
-	snprintf(dev_part, sizeof(dev_part), "%s:%s", src_storage_cfg.stroage_dev_num, src_storage_cfg.stroage_partition);
-	if (fs_set_blk_dev(src_storage_cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
+	snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg->stroage_dev_num, cfg->stroage_partition);
+	if (fs_set_blk_dev(cfg->stroage_type, dev_part, USUM_FS_TYPE)) 
 	{
 		usum_log(USUM_LOG_ERROR, "Failed to set block device\n");
 		return -1;
@@ -311,8 +334,13 @@ static int selected_img(int selected_id, img_config_t *img)
 	return 0;
 }
 
-static int download_image(img_config_t *img)
+static int download_image(storage_configs_t *cfg, img_config_t *img)
 {
+	if (!cfg)
+	{
+		return -1;
+	}
+
 	if (!img || img->addr_start == 0) 
 	{
 		usum_log(USUM_LOG_ERROR, "Invalid image configuration.\n");
@@ -320,8 +348,8 @@ static int download_image(img_config_t *img)
 	}
 
 	char dev_part[10];
-    snprintf(dev_part, sizeof(dev_part), "%s:%s", src_storage_cfg.stroage_dev_num, src_storage_cfg.stroage_partition);
-    if (fs_set_blk_dev(src_storage_cfg.stroage_type, dev_part, USUM_FS_TYPE)) 
+    snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg->stroage_dev_num, cfg->stroage_partition);
+    if (fs_set_blk_dev(cfg->stroage_type, dev_part, USUM_FS_TYPE)) 
     {
         USUM_LOG(USUM_LOG_ERROR, "Failed to set blk dev\n");
         return -1;
@@ -346,7 +374,7 @@ static int download_image(img_config_t *img)
 		USUM_LOG(USUM_LOG_ERROR, "Image load function not implemented for %s\n", img->name);
 		return -1;
 	}
-	int ret = img->funs.load(img, &src_storage_cfg, USUM_LOAD_ADDR);
+	int ret = img->funs.load(img, cfg, USUM_LOAD_ADDR);
 	if (ret < 0)
 	{
 		USUM_LOG(USUM_LOG_ERROR, "Image load failed for %s\n", img->name);
@@ -354,13 +382,13 @@ static int download_image(img_config_t *img)
 	}
 	USUM_LOG(USUM_LOG_INFO, "Image load successful for %s\n", img->name);
 
-	// 用户自定义镜像的fops中的check函数，检查待更新镜像是否有效
+	// 镜像合法性检查
 	if (!img->funs.check) 
 	{
 		USUM_LOG(USUM_LOG_ERROR, "Image check function not implemented for %s\n", img->name);
 		return -1;
 	}
-	ret = img->funs.check(img, &src_storage_cfg, (const void *)USUM_LOAD_ADDR);
+	ret = img->funs.check(img, cfg, (const void *)USUM_LOAD_ADDR);
     if (ret < 0) 
 	{
         USUM_LOG(USUM_LOG_ERROR, "Image check failed for %s\n", img->name);
@@ -374,7 +402,7 @@ static int download_image(img_config_t *img)
 		USUM_LOG(USUM_LOG_ERROR, "Image download function not implemented for %s\n", img->name);
 		return -1;
 	}
-	ret = img->funs.download(img, &src_storage_cfg, USUM_LOAD_ADDR);
+	ret = img->funs.download(img, cfg, USUM_LOAD_ADDR);
 	if (ret < 0) 
 	{
 		USUM_LOG(USUM_LOG_ERROR, "Image download failed for %s\n", img->name);
@@ -392,7 +420,10 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 	char inbuf[16] = {0};
 	int ret;
 	int selected_id;
+	storage_configs_t src_storage_cfg;		
+	storage_configs_t dest_storage_cfg;		
 
+	// register your imgs
 	register_all_img_configs();
 
 	while (1)
@@ -447,17 +478,18 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 			}
 
 			// 解析镜像配置文件
-			ret = parse_img_config_file(USUM_IMG_TXT_PATH);
+			ret = parse_img_config_file(&src_storage_cfg, USUM_IMG_TXT_PATH);
 			if (ret < 0)
 			{
 				usum_log(USUM_LOG_ERROR, "Failed to parse image config file %s\n", USUM_IMG_TXT_PATH);
 				continue;
 			}
 
-			break;  // 成功选择存储介质，跳出循环
+			// 成功选择存储介质，跳出循环
+			break;  
 		}
 
-		// 打印二级菜单（可选择更新的镜像文件）
+		// 打印二级菜单（选择要更新的镜像文件）
 		while (1)
 		{
 			printf("\n========== %s ==========\n", "Imgs");
@@ -492,17 +524,17 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 			if (selected_id < 0 || selected_id >= img_from_txt_count) 
 				continue;
 
-			// 选择镜像文件进行更新
+			// 选择镜像文件
 			img_config_t sel_img;
-			ret = selected_img(selected_id, &sel_img);
+			ret = selected_img(selected_id, &src_storage_cfg, &sel_img);
 			if (ret < 0)
 			{
 				usum_log(USUM_LOG_ERROR, "Failed to select image %s\n", img_from_txt[selected_id].name);
 				continue;
 			}
 
-			// 镜像下载
-			ret = download_image(&sel_img);
+			// 下载镜像文件
+			ret = download_image(&src_storage_cfg, &sel_img);
 			if (ret < 0)
 			{
 				usum_log(USUM_LOG_ERROR, "Failed to download image %s\n", img_from_txt[selected_id].name);
