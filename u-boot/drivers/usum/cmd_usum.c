@@ -43,29 +43,30 @@ static void register_all_img_configs(void)
 	img_rootfs_register();
 }
 
-static int parse_img_config_file(storage_configs_t *cfg, const char *filepath)
+static int load_file_from_udisk(const storage_configs_t *cfg, const char *filepath, char **buf_out, size_t *len_out)
 {
-	if (!cfg || !filepath)
+    if (!cfg || !filepath || !buf_out || !len_out)
 	{
-		return -1;
+		USUM_LOG(USUM_LOG_ERROR, "Invalid parameters for loading file from udisk.\n");
+        return -1;
 	}
 
     char dev_part[10];
     snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg->stroage_dev_num, cfg->stroage_partition);
-    if (fs_set_blk_dev(cfg->stroage_type, dev_part, USUM_FS_TYPE)) 
+    if (fs_set_blk_dev(cfg->stroage_type, dev_part, USUM_FS_TYPE))
     {
         USUM_LOG(USUM_LOG_ERROR, "Failed to set blk dev\n");
         return -1;
     }
 
-	loff_t file_size;
-    if (fs_size(filepath, &file_size)) 
+    loff_t file_size;
+    if (fs_size(USUM_IMG_TXT_PATH, &file_size)) 
     {
-        USUM_LOG(USUM_LOG_ERROR, "Failed to get size of %s\n", filepath);
+        USUM_LOG(USUM_LOG_ERROR, "Failed to get size of %s\n", USUM_IMG_TXT_PATH);
         return 0;
     }
 
-    if (file_size == 0)
+	if (file_size == 0)
         return 0;
 
     if (file_size > 8192) 
@@ -74,7 +75,7 @@ static int parse_img_config_file(storage_configs_t *cfg, const char *filepath)
         return -1;
     }
 
-	char *buf = memalign(4, file_size + 1);
+    char *buf = memalign(4, file_size + 1);
     if (!buf) 
     {
         USUM_LOG(USUM_LOG_ERROR, "Failed to allocate buffer\n");
@@ -87,54 +88,68 @@ static int parse_img_config_file(storage_configs_t *cfg, const char *filepath)
         return -1;
     }
 
-    // 读取整个 img.txt 文件
     loff_t len;
     if (fs_read(filepath, (ulong)buf, 0, file_size, &len)) 
-    {
-        USUM_LOG(USUM_LOG_ERROR, "Failed to read %s\n", filepath);
+	{
+		USUM_LOG(USUM_LOG_ERROR, "Failed to read %s\n", USUM_IMG_TXT_PATH);
         free(buf);
-        return 0;
+        return -1;
     }
 
     buf[len] = '\0';
+    *buf_out = buf;
+    *len_out = len;
+    return 0;
+}
 
-	char *p, *line;
+static int parse_img_config_buffer(const char *buf, size_t len)
+{
+    if (!buf || len == 0)
+        return -1;
+
+    char *copy = memalign(4, len + 1);
+    if (!copy)
+        return -1;
+
+    memcpy(copy, buf, len);
+    copy[len] = '\0';
+
     img_from_txt_count = 0;
-    p = buf;
-    while ((line = strsep(&p, "\n")) != NULL) 
-	{
-        // 去掉换行符
-        while (*line == '\r' || *line == '\n') 
-			line++;
+    char *p = copy, *line;
 
-        if (line[0] == '[') 
-		{
+    while ((line = strsep(&p, "\n")) != NULL)
+    {
+        while (*line == '\r' || *line == '\n')
+            line++;
+
+        if (line[0] == '[')
+        {
             if (img_from_txt_count >= USUM_IMG_TXT_MAX_IMG_CONFIGS)
                 break;
 
             char *end = strchr(line, ']');
-            if (!end) 
-				continue;
+            if (!end)
+                continue;
 
-            *end = '\0';  // 截断 ']'
+            *end = '\0';
             strncpy(img_from_txt[img_from_txt_count].name, line + 1, sizeof(img_from_txt[img_from_txt_count].name) - 1);
-        } 
-		else if (strstr(line, "LBA=")) 
-		{
+        }
+        else if (strstr(line, "LBA="))
+        {
             img_from_txt[img_from_txt_count].addr_start = simple_strtoul(line + 4, NULL, 0);
-			img_from_txt_count++;
+            img_from_txt_count++;
         }
     }
 
-	for (int i = 0; i < img_from_txt_count; i++)
-	{
-		img_from_txt[i].size = 0;
-		img_from_txt[i].funs.load = NULL;
-		img_from_txt[i].funs.check = NULL;
-		img_from_txt[i].funs.download = NULL;
-	}
+    for (int i = 0; i < img_from_txt_count; i++)
+    {
+        img_from_txt[i].size = 0;
+        img_from_txt[i].funs.load = NULL;
+        img_from_txt[i].funs.check = NULL;
+        img_from_txt[i].funs.download = NULL;
+    }
 
-    free(buf);
+    free(copy);
     return 0;
 }
 
@@ -477,8 +492,18 @@ static int do_usum(struct cmd_tbl_s *cmdtp, int flag, int argc, char *const argv
 				continue;
 			}
 
+			// 加载配置文件
+			char *buf;
+			size_t buf_size = 0;
+			ret = load_file_from_udisk(&src_storage_cfg, USUM_IMG_TXT_PATH, &buf, &buf_size);
+			if (ret < 0) 
+			{
+				usum_log(USUM_LOG_ERROR, "Failed to load image config file %s\n", USUM_IMG_TXT_PATH);
+				continue;
+			}
+
 			// 解析镜像配置文件
-			ret = parse_img_config_file(&src_storage_cfg, USUM_IMG_TXT_PATH);
+			ret = parse_img_config_buffer(buf, buf_size);
 			if (ret < 0)
 			{
 				usum_log(USUM_LOG_ERROR, "Failed to parse image config file %s\n", USUM_IMG_TXT_PATH);
