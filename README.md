@@ -206,9 +206,9 @@ static const img_config_t img_resource = {
     .addr_start = 0,
     .size = 0,
     .funs = {
-        .load = load_uboot,
-        .check = check_uboot,
-        .download = download_uboot,
+        .load = load_resource,
+        .check = check_resource,
+        .download = download_resource,
     },
 };
 ```
