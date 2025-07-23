@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2025 Cohen0415
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <common.h>
 #include <command.h>
 #include <fs.h>
@@ -15,11 +32,11 @@ static uint32_t load_rootfs(img_config_t *img, storage_configs_t *cfg, uint32_t 
 }
 
 #define ROOTFS_MAGIC 0xEF53
-static uint32_t check_rootfs(img_config_t *img, storage_configs_t *cfg, const void *img_addr) 
+static uint32_t check_rootfs(img_config_t *img, storage_configs_t *cfg, const void *img_addr)
 {
     printf("checking rootfs.img (partial read)...\n");
 
-    if (!img || !img->name) 
+    if (!img || !img->name)
     {
         printf("Invalid image config or filename\n");
         return -1;
@@ -27,7 +44,7 @@ static uint32_t check_rootfs(img_config_t *img, storage_configs_t *cfg, const vo
 
     char dev_part[10];
     snprintf(dev_part, sizeof(dev_part), "%s:%s", cfg->stroage_dev_num, cfg->stroage_partition);
-    if (fs_set_blk_dev(cfg->stroage_type, dev_part, USUM_FS_TYPE)) 
+    if (fs_set_blk_dev(cfg->stroage_type, dev_part, USUM_FS_TYPE))
     {
         printf("Failed to set blk dev\n");
         return -1;
@@ -36,20 +53,20 @@ static uint32_t check_rootfs(img_config_t *img, storage_configs_t *cfg, const vo
     // 读取 rootfs.img 中 offset 为 1080 和 1081 的两个字节
     uint8_t header[2];
     loff_t actread = 0;
-    if (fs_read(img->name, (ulong)header, 1080, 2, &actread)) 
+    if (fs_read(img->name, (ulong)header, 1080, 2, &actread))
     {
         printf("Failed to read magic from %s\n", img->name);
         return -1;
     }
 
-    if (actread != 2) 
+    if (actread != 2)
     {
         printf("Partial read: only %lld bytes read\n", actread);
         return -1;
     }
 
     uint16_t magic = header[0] | (header[1] << 8);
-    if (magic != ROOTFS_MAGIC) 
+    if (magic != ROOTFS_MAGIC)
     {
         printf("Invalid rootfs magic: 0x%04x\n", magic);
         return -1;
@@ -59,10 +76,10 @@ static uint32_t check_rootfs(img_config_t *img, storage_configs_t *cfg, const vo
     return 0;
 }
 
-#define CHUNK_SIZE     (100 * 1024 * 1024)  // 每次操作的最大块大小（100MB）   
-static uint32_t download_rootfs(img_config_t *img, storage_configs_t *cfg, uint32_t img_addr) 
+#define CHUNK_SIZE (100 * 1024 * 1024) // 每次操作的最大块大小（100MB）
+static uint32_t download_rootfs(img_config_t *img, storage_configs_t *cfg, uint32_t img_addr)
 {
-    if (!img || !cfg) 
+    if (!img || !cfg)
     {
         printf("Invalid image or storage config\n");
         return -1;
@@ -78,7 +95,7 @@ static uint32_t download_rootfs(img_config_t *img, storage_configs_t *cfg, uint3
 
     printf("Downloading rootfs: %s, total size: %llu bytes\n", img->name, total_size);
 
-    while (offset < total_size) 
+    while (offset < total_size)
     {
         uint32_t chunk_size = (total_size - offset > CHUNK_SIZE) ? CHUNK_SIZE : (total_size - offset);
 
@@ -87,7 +104,7 @@ static uint32_t download_rootfs(img_config_t *img, storage_configs_t *cfg, uint3
 
         // 1. 加载分段镜像
         snprintf(cmd, sizeof(cmd), "fatload %s 0x%08x %s 0x%x 0x%llx", dev_part, img_addr, img->name, chunk_size, offset);
-        if (run_command(cmd, 0)) 
+        if (run_command(cmd, 0))
         {
             printf("Failed to load chunk at offset 0x%llx\n", offset);
             return -1;
@@ -99,7 +116,7 @@ static uint32_t download_rootfs(img_config_t *img, storage_configs_t *cfg, uint3
 
         // 3. 写入 eMMC
         snprintf(cmd, sizeof(cmd), "mmc write 0x%08x 0x%x 0x%x", img_addr, blk_start, blk_count);
-        if (run_command(cmd, 0)) 
+        if (run_command(cmd, 0))
         {
             printf("Failed to write chunk at LBA 0x%x\n", blk_start);
             return -1;
