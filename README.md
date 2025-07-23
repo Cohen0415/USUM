@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-U--Boot-blue" />
-  <img src="https://img.shields.io/badge/License-MIT-green" />
+  <img src="https://img.shields.io/badge/License-GPLv3-red" />
   <img src="https://img.shields.io/badge/Author-Cohen0415-orange" />
 </p>
 
